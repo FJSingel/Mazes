@@ -6,6 +6,7 @@ Created on Sep 8, 2013
 import random #for random.randint
 import sys #for sys.maxint
 
+import mock
 from testify import *
 
 import Mazes #the mazes class I made
@@ -38,6 +39,8 @@ class Test(TestCase):
 
         #make an empty route
         self.__route = Mazes.MazeRoute()
+        self.__empty_route = Mazes.MazeRoute()
+        self.__empty_route.add_cells([])
         
         assert_equals(False, self.__route.valid)
 
@@ -82,16 +85,6 @@ class Test(TestCase):
         assert_equals(True, self.__route.add_cells(route_list))
         assert_equals(True, self.__route.valid) #Every cell in list is valid, but not in order
         assert_equals(sys.maxint, self.__route.travel_time())
-
-    def test_empty_route(self):
-        
-        route_list = []
-        try:
-            self.__route.add_cells(route_list)
-        except ValueError, e:
-            pass
-        else:
-            self.fail("Other unexpected error raised")
 
     @suite('disabled', reason="Basic Method Test")
     def test_route_to_string(self):
@@ -139,7 +132,6 @@ class Test(TestCase):
         self.__maze.add_cells(self.__cells)
         assert_equals(True, self.__maze.valid)
 
-    @suite('disabled', reason="Works as of HW4, but prints over a lot of screen")
     def test_random_route(self):
 
         assert_equals(False, self.__maze.valid)
@@ -148,10 +140,9 @@ class Test(TestCase):
         assert_equals(True, self.__maze.valid)
 
         #makes one of 2 possible routes
-        self.__maze.__route = self.__maze.route_random(self.__cells[1])
+        self.__maze.__route = self.__maze.generate_route(self.__cells[1], self.__maze.choose_random)
 
-        for cell in self.__maze.__route:
-            print str(cell)
+        for cell in self.__maze.__route.get_cells():
             assert_equals(True, cell.valid)
 
     def test_first_vs_random_same(self):
@@ -166,12 +157,13 @@ class Test(TestCase):
         self.__maze.add_cells(self.__cells)
         assert_equals(True, self.__maze.valid)
 
-        #~%50 chance of different routes each run. 10 loops means 1/2^5 chance of failure
-        for x in xrange(1, 11):
-            #makes the same route from 2 different route methods
-            self.__maze.__route_random = self.__maze.route_random(self.__cells[4])
-            self.__maze.__route_first = self.__maze.route_first(self.__cells[4])
-            assert_equals(self.__maze.__route_random, self.__maze.__route_first)
+        #makes the same route from 2 different route methods
+        self.__maze.__route_random = self.__maze.generate_route(self.__cells[4], self.__maze.choose_random)
+        self.__maze.__route_first = self.__maze.generate_route(self.__cells[4], self.__maze.choose_arbitrary)
+        assert_equals(self.__maze.__route_random, self.__maze.__route_first)
+
+    def ein_rand(self, min, max):
+        return 1
 
     def test_first_vs_random_different(self):
         assert_equals(False, self.__maze.valid)
@@ -179,16 +171,12 @@ class Test(TestCase):
         self.__maze.add_cells(self.__cells)
         assert_equals(True, self.__maze.valid)
 
-        #~%50 chance of different routes each run. 10 loops means 1/2^5 chance of failure
-        different = False
-        for x in xrange(1, 11):
+        #patch to make randint return 1
+        with mock.patch.object(random, "randint", self.ein_rand):
             #makes the same route from 2 different route methods
-            self.__maze.__route_random = self.__maze.route_random(self.__cells[1])
-            self.__maze.__route_first = self.__maze.route_first(self.__cells[1])
-            if self.__maze.__route_random != self.__maze.__route_first:
-                different = True
-
-        assert_equals(True, different)
+            self.__maze.__route_random = self.__maze.generate_route(self.__cells[3], self.__maze.choose_random)
+            self.__maze.__route_first = self.__maze.generate_route(self.__cells[3], self.__maze.choose_arbitrary)
+            assert_equals(False, self.__maze.__route_random == self.__maze.__route_first)
 
     def test_invalid_time(self):
         assert_equals(False, self.__maze.valid)
@@ -219,45 +207,49 @@ class Test(TestCase):
         assert_equals(True, self.__maze.valid)
 
         #make sure route_first and route_random return an empty list if a cell is not in maze
-        assert_equals([], self.__maze.route_first(self.__cells[4]))
-        assert_equals([], self.__maze.route_random(self.__cells[4]))
+        self.__maze.__route_random = self.__maze.generate_route(self.__cells[4], self.__maze.choose_random)
+        self.__maze.__route_first = self.__maze.generate_route(self.__cells[4], self.__maze.choose_arbitrary)
+            
+        assert_equals(self.__empty_route, self.__maze.generate_route(self.__cells[4], self.__maze.choose_arbitrary))
+        assert_equals(self.__empty_route, self.__maze.generate_route(self.__cells[4], self.__maze.choose_random))
 
-    @suite('disabled', reason="Works as of HW4, but prints over a lot of screen")
-    def test_zgenerate_routes(self):
+    def test_generate_routes(self):
         assert_equals(False, self.__maze.valid)
         self.__cells[4].add_passages({})
         self.__maze.add_cells(self.__cells)
         assert_equals(True, self.__maze.valid)
 
-        #tests new generate_route method
+        #tests new generate_route method for random
         self.__maze.__route = self.__maze.generate_route(self.__cells[1], self.__maze.choose_random)
 
-        for cell in self.__maze.__route:
-            print str(cell)
+        for cell in self.__maze.__route.get_cells():
             assert_equals(True, cell.valid)
 
-        #tests new generate_route method
+        #tests new generate_route method for arbitrary
         self.__maze.__route = self.__maze.generate_route(self.__cells[1], self.__maze.choose_arbitrary)
 
-        for cell in self.__maze.__route:
-            print str(cell)
+        for cell in self.__maze.__route.get_cells():
             assert_equals(True, cell.valid)
 
-        #tests new generate_route method
+        #tests new generate_route method for greedy
         self.__maze.__route = self.__maze.generate_route(self.__cells[1], self.__maze.choose_greedy)
 
-        for cell in self.__maze.__route:
-            print str(cell)
+        for cell in self.__maze.__route.get_cells():
             assert_equals(True, cell.valid)
+
+    def nein_rand(self, min, max):
+        return 0
 
     def test_average_escape_time(self):
         assert_equals(False, self.__maze.valid)
-        self.__cells[4].add_passages({ self.__cells[0]: 1})
+        self.__cells[4].add_passages({ self.__cells[1]: 1})
         self.__maze.add_cells(self.__cells)
         assert_equals(True, self.__maze.valid)
 
-        assert_equals(sys.maxint, self.__maze.average_exit_time(self.__cells[4] ,self.__maze.choose_random))
-        assert_equals(sys.maxint, self.__maze.average_exit_time(self.__cells[4] ,self.__maze.choose_arbitrary))
+        #patch to make randint return 0
+        with mock.patch.object(random, "randint", self.nein_rand):
+            assert_equals(sys.maxint, self.__maze.average_exit_time(self.__cells[4] ,self.__maze.choose_random))
+        assert_equals(7, self.__maze.average_exit_time(self.__cells[0] ,self.__maze.choose_arbitrary))
         assert_equals(6, self.__maze.average_exit_time(self.__cells[4] ,self.__maze.choose_greedy))
 
     def test_average_impossible_route(self):

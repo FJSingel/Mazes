@@ -46,6 +46,10 @@ class MazeCell(object):
         self.valid = False
         self.status = self.Status()
         
+    def valid_or_raise(self):
+        if not self.valid:
+            raise UninitializedObjectException("Invalid cell")
+
     def add_passages(self, passages):
         """
         Adds passages to the cell
@@ -74,8 +78,7 @@ class MazeCell(object):
         """
         returns a dictionary of the cell's possible destinations to travel times
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid cell")
+        self.valid_or_raise()
 
         cell_list = {}
         for cell in self.passage_dict:
@@ -88,8 +91,7 @@ class MazeCell(object):
         """
         returns the time to a target cell
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid cell")
+        self.valid_or_raise()
         
         #check for keyerror. If so, set time to max since path not found
         time = 0
@@ -103,9 +105,7 @@ class MazeCell(object):
         """
         returns a list of connected cells
         """
-        #valid or raise()
-        if not self.valid:
-            raise UninitializedObjectException("Invalid cell")
+        self.valid_or_raise()
         
         cell_list = []
         for cell in self.passage_dict:
@@ -117,11 +117,10 @@ class MazeCell(object):
         """
         returns whether or not this is a dead end
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid cell")
-        
+        self.valid_or_raise()
+
         #check for valid passages
-        for passage in self.passage_dict: ##might be able to do faster with dict comp or "if any"
+        for passage in self.passage_dict:
             if self.passage_dict[passage] < sys.maxint:
                 return False
         return True
@@ -156,15 +155,22 @@ class MazeRoute(object):
         """
         self.route = []
         self.valid = False
+
+    def __eq__(self, other):
+        """
+        Compares for equality using the lists the routes were based on
+        """
+        return self.route == other.route
+
+    def valid_or_raise(self):
+        if not self.valid:
+            raise UninitializedObjectException("Invalid route")
         
     def add_cells(self, cells):
         """
         Adds a list of cells to the route
         Cell order is important in the route
         """
-        #if cells is empty, raise exception instead of making pointless route
-        if cells == []:
-            raise ValueError("No cells implies a pointless route")
 
         #if there's already cells
         if self.valid:
@@ -172,8 +178,7 @@ class MazeRoute(object):
         
         #check for invalid cells
         for cell in cells:
-            if not cell.valid:
-                raise UninitializedObjectException("Invalid cell")
+            cell.valid_or_raise()
         
         self.valid = True
         self.route = copy.copy(cells)
@@ -184,8 +189,7 @@ class MazeRoute(object):
         Returns the total travel time of route, given each value is 1 to cell.value
         Assumes cell.value is an integer
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid route")
+        self.valid_or_raise()
         
         #if path is only 1 cell, length is 0
         if len(self.route) == 1:
@@ -209,9 +213,8 @@ class MazeRoute(object):
         """
         returns the list of cells in the route
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid route")
-        
+        self.valid_or_raise()
+
         #returns a shallow copy to maintain route integrity
         return copy.copy(self.route)
         
@@ -219,8 +222,7 @@ class MazeRoute(object):
         """
         Makes the path human readable
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid route")
+        self.valid_or_raise()
         
         #puts path starts and destinations at same indices
         route_trace = zip(self.route[:-1], self.route[1:])
@@ -243,8 +245,7 @@ class MazeRoute(object):
         """
         Totals the travel time in a route
         """
-        if not self.valid:
-            raise UninitializedObjectException("Invalid route")
+        self.valid_or_raise()
         
         #if path is only 1 cell, length is 0
         if len(self.route) == 1:
@@ -262,7 +263,6 @@ class MazeRoute(object):
             else: #if nonexistant/blocked passage
                 return sys.maxint
         return total_time 
-        ##add another argument to this
 
 class Maze(object):
     """
@@ -275,6 +275,10 @@ class Maze(object):
         """
         self.cells = []
         self.valid = False
+
+    def valid_or_raise(self):
+        if not self.valid:
+            raise UninitializedObjectException("Maze not initialized")
 
     #choices do not deal with blocked passages, as these are addressed in the make_route function
     def choose_greedy(self, initial_cell):
@@ -296,7 +300,6 @@ class Maze(object):
         """
         Chooses the first cell in the dictionary
         """
-        ##should return null?
         possible_cells = initial_cell.connected_cells()
         return possible_cells[0];
 
@@ -312,27 +315,28 @@ class Maze(object):
         This returns a route of cells that a randomly wandering "mouse" walks through
         initial_cell is a MazeCell that is supposed to be in this maze
         """
-        if not self.valid:
-            raise UninitializedObjectException("Maze not initialized")
+        self.valid_or_raise()
 
         path = []
         current_cell = initial_cell
+        route = MazeRoute()
 
         while current_cell not in path:
             #if cell is not in maze, return empty list
             if not current_cell in self.cells:
-                return []
+                route.add_cells([])
+                return route
             #if current cell wasn't visited yet, add it to the path.
             if not current_cell in path:
                 path.append(current_cell)
             #return the followed path if in a dead end
             if current_cell.is_dead_end():
-                return copy.copy(path)
-            ##return routes instead of lists
+                route.add_cells(path)
+                return route
             #makes a list of cells that can be entered and move to a random cell
             current_cell = method(current_cell);
-
-        return copy.copy(path)
+        route.add_cells(path)
+        return route
 
     def add_cells(self, cells):
         """
@@ -344,8 +348,7 @@ class Maze(object):
             return False
 
         for cell in cells:
-            if not cell.valid:
-                raise UninitializedObjectException("Added an invalid cell")
+            cell.valid_or_raise()
 
         self.cells = copy.copy(cells)
         self.valid = True
@@ -385,64 +388,3 @@ class Maze(object):
                 total_time += current_cell.passage_dict[next_cell]
                 current_cell = next_cell;
         return (total_time / (len(self.cells) - 1)) 
-
-    def route_random(self, initial_cell):
-        """
-        This returns a list of cells that a randomly wandering "mouse" walks through
-        initial_cell is a MazeCell that is supposed to be in this maze
-        """
-        if not self.valid:
-            raise UninitializedObjectException("Maze not initialized")
-
-        path = []
-        current_cell = initial_cell
-
-        while current_cell not in path:
-            #if cell is not in maze, return empty list
-            if not current_cell in self.cells:
-                return []
-            #if current cell wasn't visited yet, add it to the path.
-            if not current_cell in path:
-                path.append(current_cell)
-            else:
-                return copy.copy(path)
-
-            #return the followed path if in a dead end
-            if current_cell.is_dead_end():
-                return copy.copy(path)
-            ##return routes instead of lists
-            #makes a list of cells that can be entered and move to a random cell
-            possible_cells = current_cell.connected_cells()
-            current_cell = possible_cells[random.randint(0, len(possible_cells)-1)]
-
-        return copy.copy(path)
-
-    def route_first(self, initial_cell):
-        """
-        This returns a list of cells where a wandering "mouse" "takes all lefts"
-        Should return the same path each time
-        initial_cell is a MazeCell that is supposed to be in this maze
-        """
-        if not self.valid:
-            raise UninitializedObjectException("Maze not initialized")
-
-        path = []
-        current_cell = initial_cell
-
-        while current_cell not in path: ##while cell not in route
-            #if cell is not in maze, return empty list
-            if not current_cell in self.cells:
-                return []
-            #if current cell wasn't visited yet, add it to the path.
-            if not current_cell in path:
-                path.append(current_cell)
-            else: #Otherwise, return where you've been so far
-                return copy.copy(path)
-            #return the followed path if in a dead end
-            if current_cell.is_dead_end():
-                return copy.copy(path)
-
-            possible_cells = current_cell.connected_cells()
-            current_cell = possible_cells[0]
-
-        return copy.copy(path)
